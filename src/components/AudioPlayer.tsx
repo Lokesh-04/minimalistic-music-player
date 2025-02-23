@@ -1,5 +1,5 @@
 
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import { Play, Pause, Plus, List } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "./ui/dialog";
 import { Button } from "./ui/button";
@@ -10,6 +10,8 @@ import { toast } from "sonner";
 interface Song {
   url: string;
   title: string;
+  type: 'youtube' | 'audio';
+  videoId?: string;
 }
 
 export default function AudioPlayer() {
@@ -18,20 +20,62 @@ export default function AudioPlayer() {
   const [playlist, setPlaylist] = useState<Song[]>([]);
   const [newSongUrl, setNewSongUrl] = useState("");
   const [audio] = useState(new Audio());
+  const iframeRef = useRef<HTMLIFrameElement>(null);
+
+  useEffect(() => {
+    // Load YouTube IFrame API
+    const tag = document.createElement('script');
+    tag.src = "https://www.youtube.com/iframe_api";
+    const firstScriptTag = document.getElementsByTagName('script')[0];
+    firstScriptTag.parentNode?.insertBefore(tag, firstScriptTag);
+
+    return () => {
+      audio.pause();
+    };
+  }, []);
+
+  const extractYoutubeVideoId = (url: string): string | null => {
+    const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|\&v=)([^#\&\?]*).*/;
+    const match = url.match(regExp);
+    return (match && match[2].length === 11) ? match[2] : null;
+  };
+
+  const isYoutubeUrl = (url: string): boolean => {
+    return url.includes('youtube.com') || url.includes('youtu.be');
+  };
 
   const handlePlayPause = () => {
     if (!currentSong && playlist.length > 0) {
       setCurrentSong(playlist[0]);
-      audio.src = playlist[0].url;
-      audio.play();
+      if (playlist[0].type === 'youtube') {
+        if (iframeRef.current) {
+          // @ts-ignore
+          iframeRef.current.contentWindow?.postMessage('{"event":"command","func":"playVideo","args":""}', '*');
+        }
+      } else {
+        audio.src = playlist[0].url;
+        audio.play();
+      }
       setIsPlaying(true);
       return;
     }
 
-    if (isPlaying) {
-      audio.pause();
+    if (currentSong?.type === 'youtube') {
+      if (iframeRef.current) {
+        if (isPlaying) {
+          // @ts-ignore
+          iframeRef.current.contentWindow?.postMessage('{"event":"command","func":"pauseVideo","args":""}', '*');
+        } else {
+          // @ts-ignore
+          iframeRef.current.contentWindow?.postMessage('{"event":"command","func":"playVideo","args":""}', '*');
+        }
+      }
     } else {
-      audio.play();
+      if (isPlaying) {
+        audio.pause();
+      } else {
+        audio.play();
+      }
     }
     setIsPlaying(!isPlaying);
   };
@@ -44,10 +88,27 @@ export default function AudioPlayer() {
 
     try {
       new URL(newSongUrl);
-      const newSong = {
-        url: newSongUrl,
-        title: new URL(newSongUrl).pathname.split("/").pop() || "Untitled",
-      };
+      let newSong: Song;
+
+      if (isYoutubeUrl(newSongUrl)) {
+        const videoId = extractYoutubeVideoId(newSongUrl);
+        if (!videoId) {
+          toast.error("Invalid YouTube URL");
+          return;
+        }
+        newSong = {
+          url: newSongUrl,
+          title: "YouTube Video",
+          type: 'youtube',
+          videoId: videoId
+        };
+      } else {
+        newSong = {
+          url: newSongUrl,
+          title: new URL(newSongUrl).pathname.split("/").pop() || "Untitled",
+          type: 'audio'
+        };
+      }
       
       setPlaylist([...playlist, newSong]);
       setNewSongUrl("");
@@ -55,6 +116,20 @@ export default function AudioPlayer() {
     } catch (e) {
       toast.error("Please enter a valid URL");
     }
+  };
+
+  const playSong = (song: Song) => {
+    setCurrentSong(song);
+    if (song.type === 'youtube') {
+      if (iframeRef.current) {
+        // @ts-ignore
+        iframeRef.current.contentWindow?.postMessage('{"event":"command","func":"playVideo","args":""}', '*');
+      }
+    } else {
+      audio.src = song.url;
+      audio.play();
+    }
+    setIsPlaying(true);
   };
 
   return (
@@ -81,14 +156,9 @@ export default function AudioPlayer() {
                   <div
                     key={index}
                     className="p-2 hover:bg-black/20 rounded cursor-pointer transition-colors"
-                    onClick={() => {
-                      setCurrentSong(song);
-                      audio.src = song.url;
-                      audio.play();
-                      setIsPlaying(true);
-                    }}
+                    onClick={() => playSong(song)}
                   >
-                    {song.title}
+                    {song.title} ({song.type})
                   </div>
                 ))}
               </div>
@@ -98,7 +168,7 @@ export default function AudioPlayer() {
             <Input
               value={newSongUrl}
               onChange={(e) => setNewSongUrl(e.target.value)}
-              placeholder="Enter audio URL..."
+              placeholder="Enter audio or YouTube URL..."
               className="bg-black/20 border-none text-player-text placeholder:text-player-muted"
             />
             <Button onClick={addSong} variant="secondary" className="bg-white/10 hover:bg-white/20">
@@ -109,6 +179,18 @@ export default function AudioPlayer() {
       </Dialog>
 
       <div className="relative">
+        {currentSong?.type === 'youtube' && currentSong.videoId && (
+          <div className="absolute top-0 left-0 w-full h-full opacity-0">
+            <iframe
+              ref={iframeRef}
+              width="100%"
+              height="100%"
+              src={`https://www.youtube.com/embed/${currentSong.videoId}?enablejsapi=1&controls=0`}
+              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+              allowFullScreen
+            ></iframe>
+          </div>
+        )}
         <button
           onClick={handlePlayPause}
           className="w-32 h-32 rounded-full bg-gradient-to-br from-white/10 to-white/5 
@@ -138,7 +220,7 @@ export default function AudioPlayer() {
               <Input
                 value={newSongUrl}
                 onChange={(e) => setNewSongUrl(e.target.value)}
-                placeholder="Enter audio URL..."
+                placeholder="Enter audio or YouTube URL..."
                 className="bg-black/20 border-none text-player-text placeholder:text-player-muted"
               />
               <Button onClick={addSong} variant="secondary" className="bg-white/10 hover:bg-white/20">
