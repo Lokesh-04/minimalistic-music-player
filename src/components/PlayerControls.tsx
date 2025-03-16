@@ -1,6 +1,5 @@
 
 import { Shuffle, Repeat } from "lucide-react";
-import { Toggle } from "./ui/toggle";
 import { ToggleGroup, ToggleGroupItem } from "./ui/toggle-group";
 
 interface PlayerControlsProps {
@@ -17,7 +16,7 @@ export default function PlayerControls({
   onLoopToggle
 }: PlayerControlsProps) {
   return (
-    <div className="flex items-center justify-center mt-4 gap-2">
+    <div className="absolute top-8 left-1/2 transform -translate-x-1/2 flex items-center justify-center gap-2">
       <ToggleGroup type="multiple" className="bg-player-background/30 rounded-full p-1">
         <ToggleGroupItem 
           value="shuffle" 

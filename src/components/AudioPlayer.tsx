@@ -1,4 +1,3 @@
-
 import { useState, useRef, useEffect } from "react";
 import { toast } from "sonner";
 import { Song, extractYoutubeVideoId, isYoutubeUrl, isVideoUrl, getRandomSong } from "@/utils/audioUtils";
@@ -238,7 +237,7 @@ export default function AudioPlayer() {
   };
 
   return (
-    <div className="min-h-screen bg-player-background flex flex-col items-center justify-center p-4">
+    <div className="min-h-screen bg-player-background flex flex-col items-center justify-center p-4 relative">
       <PlaylistDialog
         playlist={playlist}
         currentSong={currentSong}
@@ -247,6 +246,13 @@ export default function AudioPlayer() {
         addSong={addSong}
         playSong={playSong}
         deleteSong={deleteSong}
+      />
+
+      <PlayerControls 
+        shuffleMode={shuffleMode}
+        loopMode={loopMode}
+        onShuffleToggle={toggleShuffleMode}
+        onLoopToggle={toggleLoopMode}
       />
 
       <div className="relative">
@@ -276,13 +282,6 @@ export default function AudioPlayer() {
           addSong={addSong}
         />
       </div>
-
-      <PlayerControls 
-        shuffleMode={shuffleMode}
-        loopMode={loopMode}
-        onShuffleToggle={toggleShuffleMode}
-        onLoopToggle={toggleLoopMode}
-      />
 
       {currentSong && (
         <p className="mt-4 text-player-text text-sm opacity-60">
