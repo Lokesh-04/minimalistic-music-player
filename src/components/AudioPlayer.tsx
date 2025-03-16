@@ -1,10 +1,11 @@
 
 import { useState, useRef, useEffect } from "react";
 import { toast } from "sonner";
-import { Song, extractYoutubeVideoId, isYoutubeUrl, isVideoUrl } from "@/utils/audioUtils";
+import { Song, extractYoutubeVideoId, isYoutubeUrl, isVideoUrl, getRandomSong } from "@/utils/audioUtils";
 import PlaylistDialog from "./PlaylistDialog";
 import AddSongDialog from "./AddSongDialog";
 import PlayerButton from "./PlayerButton";
+import PlayerControls from "./PlayerControls";
 
 export default function AudioPlayer() {
   const [isPlaying, setIsPlaying] = useState(false);
@@ -13,6 +14,8 @@ export default function AudioPlayer() {
   const [newSongUrl, setNewSongUrl] = useState("");
   const [audio] = useState(new Audio());
   const [rotation, setRotation] = useState(0);
+  const [shuffleMode, setShuffleMode] = useState(false);
+  const [loopMode, setLoopMode] = useState(false);
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const rotationIntervalRef = useRef<number | null>(null);
 
@@ -26,8 +29,12 @@ export default function AudioPlayer() {
     // Set up event listeners for audio element
     audio.addEventListener('ended', handleSongEnd);
 
+    // Set up message listener for YouTube iframe events
+    window.addEventListener('message', handleYouTubeMessage);
+
     return () => {
       audio.removeEventListener('ended', handleSongEnd);
+      window.removeEventListener('message', handleYouTubeMessage);
       audio.pause();
       if (rotationIntervalRef.current) {
         window.clearInterval(rotationIntervalRef.current);
@@ -35,16 +42,47 @@ export default function AudioPlayer() {
     };
   }, []);
 
+  // Function to handle YouTube iframe player state changes
+  const handleYouTubeMessage = (event: MessageEvent) => {
+    try {
+      if (typeof event.data === 'string') {
+        const data = JSON.parse(event.data);
+        // YouTube iframe API sends event when video ends (state = 0)
+        if (data.event === 'onStateChange' && data.info === 0) {
+          handleSongEnd();
+        }
+      }
+    } catch (e) {
+      // Not a parseable message or not from YouTube, ignore
+    }
+  };
+
   // Function to handle what happens when a song ends
   const handleSongEnd = () => {
-    const currentIndex = playlist.findIndex(song => 
-      currentSong && song.url === currentSong.url);
-    if (currentIndex !== -1 && currentIndex < playlist.length - 1) {
-      playSong(playlist[currentIndex + 1]);
+    if (shuffleMode) {
+      const nextSong = getRandomSong(playlist, currentSong);
+      if (nextSong) {
+        playSong(nextSong);
+        return;
+      }
     } else {
-      setIsPlaying(false);
-      stopRotationAnimation();
+      const currentIndex = playlist.findIndex(song => 
+        currentSong && song.url === currentSong.url);
+      
+      if (currentIndex !== -1 && currentIndex < playlist.length - 1) {
+        // Play next song in playlist
+        playSong(playlist[currentIndex + 1]);
+        return;
+      } else if (loopMode && playlist.length > 0) {
+        // Loop back to the first song if loop mode is enabled
+        playSong(playlist[0]);
+        return;
+      }
     }
+    
+    // If we reach here, stop playback
+    setIsPlaying(false);
+    stopRotationAnimation();
   };
 
   const handlePlayPause = () => {
@@ -154,14 +192,7 @@ export default function AudioPlayer() {
     setCurrentSong(song);
     
     if (song.type === 'youtube') {
-      // The iframe will be updated through the effect of currentSong change
-      // We need to wait for the iframe to load before we can send messages to it
-      setTimeout(() => {
-        if (iframeRef.current) {
-          // @ts-ignore
-          iframeRef.current.contentWindow?.postMessage('{"event":"command","func":"playVideo","args":""}', '*');
-        }
-      }, 1000);
+      // YouTube will auto-play when the iframe loads with autoplay=1
       startRotationAnimation();
     } else {
       audio.src = song.url;
@@ -196,6 +227,16 @@ export default function AudioPlayer() {
     toast.success("Song removed from playlist");
   };
 
+  const toggleShuffleMode = () => {
+    setShuffleMode(prev => !prev);
+    toast.success(shuffleMode ? "Shuffle mode disabled" : "Shuffle mode enabled");
+  };
+
+  const toggleLoopMode = () => {
+    setLoopMode(prev => !prev);
+    toast.success(loopMode ? "Loop mode disabled" : "Loop mode enabled");
+  };
+
   return (
     <div className="min-h-screen bg-player-background flex flex-col items-center justify-center p-4">
       <PlaylistDialog
@@ -210,12 +251,12 @@ export default function AudioPlayer() {
 
       <div className="relative">
         {currentSong?.type === 'youtube' && currentSong.videoId && (
-          <div className="absolute top-0 left-0 w-full h-full opacity-0">
+          <div className="absolute top-0 left-0 w-full h-full opacity-0 pointer-events-none">
             <iframe
               ref={iframeRef}
               width="100%"
               height="100%"
-              src={`https://www.youtube.com/embed/${currentSong.videoId}?enablejsapi=1&controls=0&autoplay=0`}
+              src={`https://www.youtube.com/embed/${currentSong.videoId}?enablejsapi=1&controls=0&autoplay=1&playsinline=1`}
               allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
               allowFullScreen
               title="YouTube video player"
@@ -236,8 +277,15 @@ export default function AudioPlayer() {
         />
       </div>
 
+      <PlayerControls 
+        shuffleMode={shuffleMode}
+        loopMode={loopMode}
+        onShuffleToggle={toggleShuffleMode}
+        onLoopToggle={toggleLoopMode}
+      />
+
       {currentSong && (
-        <p className="mt-8 text-player-text text-sm opacity-60">
+        <p className="mt-4 text-player-text text-sm opacity-60">
           Now Playing: {currentSong.title}
         </p>
       )}
