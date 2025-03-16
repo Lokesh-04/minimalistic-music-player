@@ -1,6 +1,6 @@
 
 import { useState, useRef, useEffect } from "react";
-import { Play, Pause, Plus, List } from "lucide-react";
+import { Play, Pause, Plus, List, Trash2, Music, Video } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "./ui/dialog";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
@@ -10,8 +10,9 @@ import { toast } from "sonner";
 interface Song {
   url: string;
   title: string;
-  type: 'youtube' | 'audio';
+  type: 'youtube' | 'audio' | 'video';
   videoId?: string;
+  thumbnail?: string;
 }
 
 export default function AudioPlayer() {
@@ -20,7 +21,9 @@ export default function AudioPlayer() {
   const [playlist, setPlaylist] = useState<Song[]>([]);
   const [newSongUrl, setNewSongUrl] = useState("");
   const [audio] = useState(new Audio());
+  const [rotation, setRotation] = useState(0);
   const iframeRef = useRef<HTMLIFrameElement>(null);
+  const rotationIntervalRef = useRef<number | null>(null);
 
   useEffect(() => {
     // Load YouTube IFrame API
@@ -29,10 +32,29 @@ export default function AudioPlayer() {
     const firstScriptTag = document.getElementsByTagName('script')[0];
     firstScriptTag.parentNode?.insertBefore(tag, firstScriptTag);
 
+    // Set up event listeners for audio element
+    audio.addEventListener('ended', handleSongEnd);
+
     return () => {
+      audio.removeEventListener('ended', handleSongEnd);
       audio.pause();
+      if (rotationIntervalRef.current) {
+        window.clearInterval(rotationIntervalRef.current);
+      }
     };
   }, []);
+
+  // Function to handle what happens when a song ends
+  const handleSongEnd = () => {
+    const currentIndex = playlist.findIndex(song => 
+      currentSong && song.url === currentSong.url);
+    if (currentIndex !== -1 && currentIndex < playlist.length - 1) {
+      playSong(playlist[currentIndex + 1]);
+    } else {
+      setIsPlaying(false);
+      stopRotationAnimation();
+    }
+  };
 
   const extractYoutubeVideoId = (url: string): string | null => {
     const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|\&v=)([^#\&\?]*).*/;
@@ -44,19 +66,14 @@ export default function AudioPlayer() {
     return url.includes('youtube.com') || url.includes('youtu.be');
   };
 
+  const isVideoUrl = (url: string): boolean => {
+    const extension = url.split('.').pop()?.toLowerCase();
+    return extension === 'mp4' || extension === 'webm' || extension === 'mov';
+  };
+
   const handlePlayPause = () => {
     if (!currentSong && playlist.length > 0) {
-      setCurrentSong(playlist[0]);
-      if (playlist[0].type === 'youtube') {
-        if (iframeRef.current) {
-          // @ts-ignore
-          iframeRef.current.contentWindow?.postMessage('{"event":"command","func":"playVideo","args":""}', '*');
-        }
-      } else {
-        audio.src = playlist[0].url;
-        audio.play();
-      }
-      setIsPlaying(true);
+      playSong(playlist[0]);
       return;
     }
 
@@ -65,19 +82,44 @@ export default function AudioPlayer() {
         if (isPlaying) {
           // @ts-ignore
           iframeRef.current.contentWindow?.postMessage('{"event":"command","func":"pauseVideo","args":""}', '*');
+          stopRotationAnimation();
         } else {
           // @ts-ignore
           iframeRef.current.contentWindow?.postMessage('{"event":"command","func":"playVideo","args":""}', '*');
+          startRotationAnimation();
         }
       }
     } else {
       if (isPlaying) {
         audio.pause();
+        stopRotationAnimation();
       } else {
-        audio.play();
+        audio.play()
+          .catch(err => {
+            console.error("Error playing audio:", err);
+            toast.error("Failed to play this audio file");
+          });
+        startRotationAnimation();
       }
     }
     setIsPlaying(!isPlaying);
+  };
+
+  const startRotationAnimation = () => {
+    if (rotationIntervalRef.current) {
+      window.clearInterval(rotationIntervalRef.current);
+    }
+    
+    rotationIntervalRef.current = window.setInterval(() => {
+      setRotation(prev => (prev + 1) % 360);
+    }, 50);
+  };
+
+  const stopRotationAnimation = () => {
+    if (rotationIntervalRef.current) {
+      window.clearInterval(rotationIntervalRef.current);
+      rotationIntervalRef.current = null;
+    }
   };
 
   const addSong = () => {
@@ -100,12 +142,19 @@ export default function AudioPlayer() {
           url: newSongUrl,
           title: "YouTube Video",
           type: 'youtube',
-          videoId: videoId
+          videoId: videoId,
+          thumbnail: `https://img.youtube.com/vi/${videoId}/mqdefault.jpg`
+        };
+      } else if (isVideoUrl(newSongUrl)) {
+        newSong = {
+          url: newSongUrl,
+          title: new URL(newSongUrl).pathname.split("/").pop() || "Untitled Video",
+          type: 'video'
         };
       } else {
         newSong = {
           url: newSongUrl,
-          title: new URL(newSongUrl).pathname.split("/").pop() || "Untitled",
+          title: new URL(newSongUrl).pathname.split("/").pop() || "Untitled Audio",
           type: 'audio'
         };
       }
@@ -119,17 +168,56 @@ export default function AudioPlayer() {
   };
 
   const playSong = (song: Song) => {
+    // Stop current playback
+    audio.pause();
+    if (iframeRef.current) {
+      // @ts-ignore
+      iframeRef.current.contentWindow?.postMessage('{"event":"command","func":"stopVideo","args":""}', '*');
+    }
+    
     setCurrentSong(song);
+    
     if (song.type === 'youtube') {
-      if (iframeRef.current) {
-        // @ts-ignore
-        iframeRef.current.contentWindow?.postMessage('{"event":"command","func":"playVideo","args":""}', '*');
-      }
+      // The iframe will be updated through the effect of currentSong change
+      // We need to wait for the iframe to load before we can send messages to it
+      setTimeout(() => {
+        if (iframeRef.current) {
+          // @ts-ignore
+          iframeRef.current.contentWindow?.postMessage('{"event":"command","func":"playVideo","args":""}', '*');
+        }
+      }, 1000);
+      startRotationAnimation();
     } else {
       audio.src = song.url;
-      audio.play();
+      audio.play()
+        .catch(err => {
+          console.error("Error playing audio:", err);
+          toast.error("Failed to play this file");
+        });
+      startRotationAnimation();
     }
     setIsPlaying(true);
+  };
+
+  const deleteSong = (index: number) => {
+    const newPlaylist = [...playlist];
+    const deletedSong = newPlaylist[index];
+    
+    // Check if the deleted song is currently playing
+    if (currentSong && currentSong.url === deletedSong.url) {
+      audio.pause();
+      if (iframeRef.current) {
+        // @ts-ignore
+        iframeRef.current.contentWindow?.postMessage('{"event":"command","func":"stopVideo","args":""}', '*');
+      }
+      setCurrentSong(null);
+      setIsPlaying(false);
+      stopRotationAnimation();
+    }
+    
+    newPlaylist.splice(index, 1);
+    setPlaylist(newPlaylist);
+    toast.success("Song removed from playlist");
   };
 
   return (
@@ -143,22 +231,47 @@ export default function AudioPlayer() {
             <List className="w-6 h-6" />
           </Button>
         </DialogTrigger>
-        <DialogContent className="bg-player-accent border-none text-player-text">
+        <DialogContent className="bg-player-accent border-none text-player-text max-w-3xl">
           <DialogHeader>
             <DialogTitle className="text-player-text">Playlist</DialogTitle>
           </DialogHeader>
-          <ScrollArea className="h-[300px] w-full rounded-md">
+          <ScrollArea className="h-[400px] w-full rounded-md">
             {playlist.length === 0 ? (
               <p className="text-player-muted text-center py-4">No songs in playlist</p>
             ) : (
-              <div className="space-y-2">
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 p-2">
                 {playlist.map((song, index) => (
                   <div
                     key={index}
-                    className="p-2 hover:bg-black/20 rounded cursor-pointer transition-colors"
+                    className="relative p-3 hover:bg-black/20 rounded cursor-pointer transition-colors group glass-morphism"
                     onClick={() => playSong(song)}
                   >
-                    {song.title} ({song.type})
+                    <div className="flex flex-col items-center">
+                      {song.type === 'youtube' && song.thumbnail ? (
+                        <div className="w-full h-24 mb-2 overflow-hidden rounded">
+                          <img 
+                            src={song.thumbnail} 
+                            alt={song.title} 
+                            className="w-full h-full object-cover"
+                          />
+                        </div>
+                      ) : song.type === 'video' ? (
+                        <Video className="w-12 h-12 mb-2 text-player-text" />
+                      ) : (
+                        <Music className="w-12 h-12 mb-2 text-player-text" />
+                      )}
+                      <p className="text-sm truncate max-w-full">{song.title}</p>
+                      <span className="text-xs text-player-muted mt-1 capitalize">{song.type}</span>
+                    </div>
+                    <button 
+                      className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity bg-black/40 p-1 rounded-full"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        deleteSong(index);
+                      }}
+                    >
+                      <Trash2 className="w-4 h-4 text-red-400" />
+                    </button>
                   </div>
                 ))}
               </div>
@@ -168,7 +281,7 @@ export default function AudioPlayer() {
             <Input
               value={newSongUrl}
               onChange={(e) => setNewSongUrl(e.target.value)}
-              placeholder="Enter audio or YouTube URL..."
+              placeholder="Enter audio, video or YouTube URL..."
               className="bg-black/20 border-none text-player-text placeholder:text-player-muted"
             />
             <Button onClick={addSong} variant="secondary" className="bg-white/10 hover:bg-white/20">
@@ -185,9 +298,10 @@ export default function AudioPlayer() {
               ref={iframeRef}
               width="100%"
               height="100%"
-              src={`https://www.youtube.com/embed/${currentSong.videoId}?enablejsapi=1&controls=0`}
+              src={`https://www.youtube.com/embed/${currentSong.videoId}?enablejsapi=1&controls=0&autoplay=0`}
               allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
               allowFullScreen
+              title="YouTube video player"
             ></iframe>
           </div>
         )}
@@ -196,6 +310,10 @@ export default function AudioPlayer() {
           className="w-32 h-32 rounded-full bg-gradient-to-br from-white/10 to-white/5 
                      flex items-center justify-center text-player-text hover:scale-105 
                      transition-all duration-300 shadow-lg hover:shadow-xl"
+          style={{ 
+            transform: isPlaying ? `rotate(${rotation}deg)` : 'none',
+            transition: 'transform 0.1s linear'
+          }}
         >
           {isPlaying ? (
             <Pause className="w-12 h-12" />
@@ -220,7 +338,7 @@ export default function AudioPlayer() {
               <Input
                 value={newSongUrl}
                 onChange={(e) => setNewSongUrl(e.target.value)}
-                placeholder="Enter audio or YouTube URL..."
+                placeholder="Enter audio, video or YouTube URL..."
                 className="bg-black/20 border-none text-player-text placeholder:text-player-muted"
               />
               <Button onClick={addSong} variant="secondary" className="bg-white/10 hover:bg-white/20">
