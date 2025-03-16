@@ -1,19 +1,10 @@
 
 import { useState, useRef, useEffect } from "react";
-import { Play, Pause, Plus, List, Trash2, Music, Video } from "lucide-react";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "./ui/dialog";
-import { Button } from "./ui/button";
-import { Input } from "./ui/input";
-import { ScrollArea } from "./ui/scroll-area";
 import { toast } from "sonner";
-
-interface Song {
-  url: string;
-  title: string;
-  type: 'youtube' | 'audio' | 'video';
-  videoId?: string;
-  thumbnail?: string;
-}
+import { Song, extractYoutubeVideoId, isYoutubeUrl, isVideoUrl } from "@/utils/audioUtils";
+import PlaylistDialog from "./PlaylistDialog";
+import AddSongDialog from "./AddSongDialog";
+import PlayerButton from "./PlayerButton";
 
 export default function AudioPlayer() {
   const [isPlaying, setIsPlaying] = useState(false);
@@ -54,21 +45,6 @@ export default function AudioPlayer() {
       setIsPlaying(false);
       stopRotationAnimation();
     }
-  };
-
-  const extractYoutubeVideoId = (url: string): string | null => {
-    const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|\&v=)([^#\&\?]*).*/;
-    const match = url.match(regExp);
-    return (match && match[2].length === 11) ? match[2] : null;
-  };
-
-  const isYoutubeUrl = (url: string): boolean => {
-    return url.includes('youtube.com') || url.includes('youtu.be');
-  };
-
-  const isVideoUrl = (url: string): boolean => {
-    const extension = url.split('.').pop()?.toLowerCase();
-    return extension === 'mp4' || extension === 'webm' || extension === 'mov';
   };
 
   const handlePlayPause = () => {
@@ -222,74 +198,15 @@ export default function AudioPlayer() {
 
   return (
     <div className="min-h-screen bg-player-background flex flex-col items-center justify-center p-4">
-      <Dialog>
-        <DialogTrigger asChild>
-          <Button
-            variant="ghost"
-            className="absolute top-8 right-8 text-player-text hover:text-white transition-colors"
-          >
-            <List className="w-6 h-6" />
-          </Button>
-        </DialogTrigger>
-        <DialogContent className="bg-player-accent border-none text-player-text max-w-3xl">
-          <DialogHeader>
-            <DialogTitle className="text-player-text">Playlist</DialogTitle>
-          </DialogHeader>
-          <ScrollArea className="h-[400px] w-full rounded-md">
-            {playlist.length === 0 ? (
-              <p className="text-player-muted text-center py-4">No songs in playlist</p>
-            ) : (
-              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 p-2">
-                {playlist.map((song, index) => (
-                  <div
-                    key={index}
-                    className="relative p-3 hover:bg-black/20 rounded cursor-pointer transition-colors group glass-morphism"
-                    onClick={() => playSong(song)}
-                  >
-                    <div className="flex flex-col items-center">
-                      {song.type === 'youtube' && song.thumbnail ? (
-                        <div className="w-full h-24 mb-2 overflow-hidden rounded">
-                          <img 
-                            src={song.thumbnail} 
-                            alt={song.title} 
-                            className="w-full h-full object-cover"
-                          />
-                        </div>
-                      ) : song.type === 'video' ? (
-                        <Video className="w-12 h-12 mb-2 text-player-text" />
-                      ) : (
-                        <Music className="w-12 h-12 mb-2 text-player-text" />
-                      )}
-                      <p className="text-sm truncate max-w-full">{song.title}</p>
-                      <span className="text-xs text-player-muted mt-1 capitalize">{song.type}</span>
-                    </div>
-                    <button 
-                      className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity bg-black/40 p-1 rounded-full"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        deleteSong(index);
-                      }}
-                    >
-                      <Trash2 className="w-4 h-4 text-red-400" />
-                    </button>
-                  </div>
-                ))}
-              </div>
-            )}
-          </ScrollArea>
-          <div className="flex gap-2">
-            <Input
-              value={newSongUrl}
-              onChange={(e) => setNewSongUrl(e.target.value)}
-              placeholder="Enter audio, video or YouTube URL..."
-              className="bg-black/20 border-none text-player-text placeholder:text-player-muted"
-            />
-            <Button onClick={addSong} variant="secondary" className="bg-white/10 hover:bg-white/20">
-              Add
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
+      <PlaylistDialog
+        playlist={playlist}
+        currentSong={currentSong}
+        newSongUrl={newSongUrl}
+        setNewSongUrl={setNewSongUrl}
+        addSong={addSong}
+        playSong={playSong}
+        deleteSong={deleteSong}
+      />
 
       <div className="relative">
         {currentSong?.type === 'youtube' && currentSong.videoId && (
@@ -305,48 +222,18 @@ export default function AudioPlayer() {
             ></iframe>
           </div>
         )}
-        <button
-          onClick={handlePlayPause}
-          className="w-32 h-32 rounded-full bg-gradient-to-br from-white/10 to-white/5 
-                     flex items-center justify-center text-player-text hover:scale-105 
-                     transition-all duration-300 shadow-lg hover:shadow-xl"
-          style={{ 
-            transform: isPlaying ? `rotate(${rotation}deg)` : 'none',
-            transition: 'transform 0.1s linear'
-          }}
-        >
-          {isPlaying ? (
-            <Pause className="w-12 h-12" />
-          ) : (
-            <Play className="w-12 h-12 ml-2" />
-          )}
-        </button>
         
-        <Dialog>
-          <DialogTrigger asChild>
-            <button className="absolute -bottom-12 left-1/2 -translate-x-1/2 w-10 h-10 
-                              rounded-full bg-white/10 flex items-center justify-center 
-                              text-player-text hover:bg-white/20 transition-colors">
-              <Plus className="w-5 h-5" />
-            </button>
-          </DialogTrigger>
-          <DialogContent className="bg-player-accent border-none text-player-text">
-            <DialogHeader>
-              <DialogTitle>Add Song</DialogTitle>
-            </DialogHeader>
-            <div className="flex gap-2">
-              <Input
-                value={newSongUrl}
-                onChange={(e) => setNewSongUrl(e.target.value)}
-                placeholder="Enter audio, video or YouTube URL..."
-                className="bg-black/20 border-none text-player-text placeholder:text-player-muted"
-              />
-              <Button onClick={addSong} variant="secondary" className="bg-white/10 hover:bg-white/20">
-                Add
-              </Button>
-            </div>
-          </DialogContent>
-        </Dialog>
+        <PlayerButton
+          isPlaying={isPlaying}
+          rotation={rotation}
+          onClick={handlePlayPause}
+        />
+        
+        <AddSongDialog
+          newSongUrl={newSongUrl}
+          setNewSongUrl={setNewSongUrl}
+          addSong={addSong}
+        />
       </div>
 
       {currentSong && (
