@@ -1,5 +1,5 @@
 
-import { Shuffle, RepeatOne } from "lucide-react";
+import { Shuffle, Repeat } from "lucide-react";
 import { Toggle } from "./ui/toggle";
 import { ToggleGroup, ToggleGroupItem } from "./ui/toggle-group";
 
@@ -22,7 +22,7 @@ export default function PlayerControls({
         <ToggleGroupItem 
           value="shuffle" 
           aria-label="Toggle shuffle"
-          pressed={shuffleMode}
+          data-state={shuffleMode ? "on" : "off"}
           onClick={onShuffleToggle}
           className="h-8 w-8 p-0 data-[state=on]:bg-white/20 text-player-text rounded-full"
         >
@@ -32,11 +32,11 @@ export default function PlayerControls({
         <ToggleGroupItem 
           value="loop" 
           aria-label="Toggle loop"
-          pressed={loopMode}
+          data-state={loopMode ? "on" : "off"}
           onClick={onLoopToggle}
           className="h-8 w-8 p-0 data-[state=on]:bg-white/20 text-player-text rounded-full"
         >
-          <RepeatOne className="h-4 w-4" />
+          <Repeat className="h-4 w-4" />
         </ToggleGroupItem>
       </ToggleGroup>
     </div>
