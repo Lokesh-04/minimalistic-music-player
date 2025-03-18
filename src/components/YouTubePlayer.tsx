@@ -13,7 +13,7 @@ const YouTubePlayer = forwardRef<HTMLIFrameElement, YouTubePlayerProps>(
           ref={ref}
           width="100%"
           height="100%"
-          src={`https://www.youtube.com/embed/${videoId}?enablejsapi=1&controls=0&autoplay=1&playsinline=1`}
+          src={`https://www.youtube.com/embed/${videoId}?enablejsapi=1&controls=0&autoplay=1&playsinline=1&origin=${window.location.origin}`}
           allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
           allowFullScreen
           title="YouTube video player"

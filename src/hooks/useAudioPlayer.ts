@@ -1,4 +1,3 @@
-
 import { useState, useRef, useEffect } from "react";
 import { toast } from "sonner";
 import { Song, extractYoutubeVideoId, isYoutubeUrl, isVideoUrl, getRandomSong } from "@/utils/audioUtils";
@@ -55,30 +54,45 @@ export function useAudioPlayer() {
 
   // Function to handle what happens when a song ends
   const handleSongEnd = () => {
+    if (!currentSong || playlist.length === 0) {
+      setIsPlaying(false);
+      stopRotationAnimation();
+      return;
+    }
+
+    const currentIndex = playlist.findIndex(song => 
+      song.url === currentSong.url);
+    
+    if (currentIndex === -1) {
+      // If the current song isn't in the playlist anymore
+      setIsPlaying(false);
+      stopRotationAnimation();
+      return;
+    }
+
+    let nextSong: Song | null = null;
+
     if (shuffleMode) {
-      const nextSong = getRandomSong(playlist, currentSong);
-      if (nextSong) {
-        playSong(nextSong);
-        return;
-      }
+      // Get a random song that's different from the current one
+      nextSong = getRandomSong(playlist, currentSong);
     } else {
-      const currentIndex = playlist.findIndex(song => 
-        currentSong && song.url === currentSong.url);
-      
-      if (currentIndex !== -1 && currentIndex < playlist.length - 1) {
-        // Play next song in playlist
-        playSong(playlist[currentIndex + 1]);
-        return;
+      // Play next song in playlist
+      if (currentIndex < playlist.length - 1) {
+        nextSong = playlist[currentIndex + 1];
       } else if (loopMode && playlist.length > 0) {
         // Loop back to the first song if loop mode is enabled
-        playSong(playlist[0]);
-        return;
+        nextSong = playlist[0];
       }
     }
-    
-    // If we reach here, stop playback
-    setIsPlaying(false);
-    stopRotationAnimation();
+
+    if (nextSong) {
+      // Play the next song
+      playSong(nextSong);
+    } else {
+      // If no next song (end of playlist and not looping)
+      setIsPlaying(false);
+      stopRotationAnimation();
+    }
   };
 
   const handlePlayPause = () => {
