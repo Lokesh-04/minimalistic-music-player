@@ -4,7 +4,7 @@ import { useRotationAnimation } from "./useRotationAnimation";
 import { useYouTubePlayer } from "./useYouTubePlayer";
 import { usePlaylistController } from "./usePlaylistController";
 import { usePlaybackController } from "./usePlaybackController";
-import { useCallback } from "react";
+import { useCallback, useEffect } from "react";
 import { Song, getRandomSong } from "@/utils/audioUtils";
 import { toast } from "sonner";
 
@@ -29,7 +29,9 @@ export function useAudioPlayer() {
   const playSong = useCallback((song: Song) => {
     // Stop current playback
     audio.pause();
-    stopYouTubeVideo(iframeRef);
+    if (stopYouTubeVideo) {
+      stopYouTubeVideo(iframeRef);
+    }
     
     setCurrentSong(song);
     
@@ -50,6 +52,7 @@ export function useAudioPlayer() {
 
   // Define handleSongEnd after playSong but before using it
   const handleSongEnd = useCallback(() => {
+    console.log("Song ended, finding next song");
     if (!currentSong || playlist.length === 0) {
       setIsPlaying(false);
       stopRotationAnimation();
@@ -58,6 +61,8 @@ export function useAudioPlayer() {
 
     const currentIndex = playlist.findIndex(song => 
       song.url === currentSong.url);
+    
+    console.log("Current index:", currentIndex, "Playlist length:", playlist.length);
     
     if (currentIndex === -1) {
       // If the current song isn't in the playlist anymore
@@ -81,9 +86,13 @@ export function useAudioPlayer() {
       }
     }
 
+    console.log("Next song:", nextSong);
+
     if (nextSong) {
       // Play the next song
-      playSong(nextSong);
+      setTimeout(() => {
+        playSong(nextSong!);
+      }, 500);
     } else {
       // If no next song (end of playlist and not looping)
       setIsPlaying(false);
@@ -96,6 +105,20 @@ export function useAudioPlayer() {
 
   // Fix the dependency array in playSong to include stopYouTubeVideo
   // This is handled implicitly as we're defining it outside and it's in scope
+
+  // Set up explicit event listener for audio ended event
+  useEffect(() => {
+    // Remove any existing listeners to avoid duplicates
+    audio.removeEventListener('ended', handleSongEnd);
+    
+    // Add the event listener
+    audio.addEventListener('ended', handleSongEnd);
+    
+    // Clean up on component unmount
+    return () => {
+      audio.removeEventListener('ended', handleSongEnd);
+    };
+  }, [audio, handleSongEnd]);
 
   // Use playbackController with the now fully defined functions
   const { handlePlayPause } = usePlaybackController(
