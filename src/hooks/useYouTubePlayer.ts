@@ -1,7 +1,22 @@
 
-import { MutableRefObject, useEffect } from "react";
+import { MutableRefObject, useEffect, useCallback } from "react";
 
-export function useYouTubePlayer(handleSongEnd: () => void) {
+export function useYouTubePlayer(onVideoEnd: () => void) {
+  // Handle YouTube iframe player state changes
+  const handleYouTubeMessage = useCallback((event: MessageEvent) => {
+    try {
+      if (typeof event.data === 'string') {
+        const data = JSON.parse(event.data);
+        // YouTube iframe API sends event when video ends (state = 0)
+        if (data.event === 'onStateChange' && data.info === 0) {
+          onVideoEnd();
+        }
+      }
+    } catch (e) {
+      // Not a parseable message or not from YouTube, ignore
+    }
+  }, [onVideoEnd]);
+
   useEffect(() => {
     // Load YouTube IFrame API
     const tag = document.createElement('script');
@@ -15,22 +30,7 @@ export function useYouTubePlayer(handleSongEnd: () => void) {
     return () => {
       window.removeEventListener('message', handleYouTubeMessage);
     };
-  }, []);
-
-  // Function to handle YouTube iframe player state changes
-  const handleYouTubeMessage = (event: MessageEvent) => {
-    try {
-      if (typeof event.data === 'string') {
-        const data = JSON.parse(event.data);
-        // YouTube iframe API sends event when video ends (state = 0)
-        if (data.event === 'onStateChange' && data.info === 0) {
-          handleSongEnd();
-        }
-      }
-    } catch (e) {
-      // Not a parseable message or not from YouTube, ignore
-    }
-  };
+  }, [handleYouTubeMessage]);
 
   const playYouTubeVideo = (iframeRef: MutableRefObject<HTMLIFrameElement | null>) => {
     if (iframeRef.current) {
