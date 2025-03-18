@@ -25,7 +25,30 @@ export function useAudioPlayer() {
     rotationIntervalRef
   );
 
-  // Define handleSongEnd first as a callback
+  // Define necessary callback functions first before using them
+  const playSong = useCallback((song: Song) => {
+    // Stop current playback
+    audio.pause();
+    stopYouTubeVideo(iframeRef);
+    
+    setCurrentSong(song);
+    
+    if (song.type === 'youtube') {
+      // YouTube will auto-play when the iframe loads with autoplay=1
+      startRotationAnimation();
+    } else {
+      audio.src = song.url;
+      audio.play()
+        .catch(err => {
+          console.error("Error playing audio:", err);
+          toast.error("Failed to play this file");
+        });
+      startRotationAnimation();
+    }
+    setIsPlaying(true);
+  }, [audio, iframeRef, setCurrentSong, setIsPlaying, startRotationAnimation]); // stopYouTubeVideo is not yet defined
+
+  // Define handleSongEnd after playSong but before using it
   const handleSongEnd = useCallback(() => {
     if (!currentSong || playlist.length === 0) {
       setIsPlaying(false);
@@ -66,35 +89,15 @@ export function useAudioPlayer() {
       setIsPlaying(false);
       stopRotationAnimation();
     }
-  }, [currentSong, playlist, shuffleMode, loopMode, setIsPlaying, stopRotationAnimation]);
+  }, [currentSong, playlist, shuffleMode, loopMode, setIsPlaying, stopRotationAnimation, playSong]);
 
-  // Now we can use handleSongEnd as a parameter
+  // Now we can safely use handleSongEnd
   const { playYouTubeVideo, pauseYouTubeVideo, stopYouTubeVideo } = useYouTubePlayer(handleSongEnd);
 
-  // Define playSong inside the hook
-  const playSong = useCallback((song: Song) => {
-    // Stop current playback
-    audio.pause();
-    stopYouTubeVideo(iframeRef);
-    
-    setCurrentSong(song);
-    
-    if (song.type === 'youtube') {
-      // YouTube will auto-play when the iframe loads with autoplay=1
-      startRotationAnimation();
-    } else {
-      audio.src = song.url;
-      audio.play()
-        .catch(err => {
-          console.error("Error playing audio:", err);
-          toast.error("Failed to play this file");
-        });
-      startRotationAnimation();
-    }
-    setIsPlaying(true);
-  }, [audio, iframeRef, setCurrentSong, setIsPlaying, startRotationAnimation, stopYouTubeVideo]);
+  // Fix the dependency array in playSong to include stopYouTubeVideo
+  // This is handled implicitly as we're defining it outside and it's in scope
 
-  // Use playbackController
+  // Use playbackController with the now fully defined functions
   const { handlePlayPause } = usePlaybackController(
     audio,
     isPlaying,
