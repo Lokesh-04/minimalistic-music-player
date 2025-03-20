@@ -4,7 +4,7 @@ import { useRotationAnimation } from "./useRotationAnimation";
 import { useYouTubePlayer } from "./useYouTubePlayer";
 import { usePlaylistController } from "./usePlaylistController";
 import { usePlaybackController } from "./usePlaybackController";
-import { useCallback, useEffect } from "react";
+import { useCallback, useEffect, useRef } from "react";
 import { Song, getRandomSong } from "@/utils/audioUtils";
 import { toast } from "sonner";
 
@@ -25,12 +25,20 @@ export function useAudioPlayer() {
     rotationIntervalRef
   );
 
+  // Create a ref to store the handleSongEnd function to avoid circular dependencies
+  const handleSongEndRef = useRef<() => void>(() => {});
+
   // Define necessary callback functions first before using them
   const playSong = useCallback((song: Song) => {
+    console.log("Playing song:", song.title);
+    
     // Stop current playback
     audio.pause();
-    if (stopYouTubeVideo) {
-      stopYouTubeVideo(iframeRef);
+    
+    // We need to use the YouTube player functions differently
+    const iframe = iframeRef.current;
+    if (iframe) {
+      iframe.contentWindow?.postMessage('{"event":"command","func":"stopVideo","args":""}', '*');
     }
     
     setCurrentSong(song);
@@ -48,12 +56,14 @@ export function useAudioPlayer() {
       startRotationAnimation();
     }
     setIsPlaying(true);
-  }, [audio, iframeRef, setCurrentSong, setIsPlaying, startRotationAnimation]); // stopYouTubeVideo is not yet defined
+  }, [audio, iframeRef, setCurrentSong, setIsPlaying, startRotationAnimation]);
 
-  // Define handleSongEnd after playSong but before using it
+  // Define the handleSongEnd function
   const handleSongEnd = useCallback(() => {
     console.log("Song ended, finding next song");
+    
     if (!currentSong || playlist.length === 0) {
+      console.log("No current song or empty playlist");
       setIsPlaying(false);
       stopRotationAnimation();
       return;
@@ -66,6 +76,7 @@ export function useAudioPlayer() {
     
     if (currentIndex === -1) {
       // If the current song isn't in the playlist anymore
+      console.log("Current song not found in playlist");
       setIsPlaying(false);
       stopRotationAnimation();
       return;
@@ -89,36 +100,49 @@ export function useAudioPlayer() {
     console.log("Next song:", nextSong);
 
     if (nextSong) {
-      // Play the next song
+      // Play the next song with a small delay to avoid issues
+      console.log("Will play next song:", nextSong.title);
       setTimeout(() => {
         playSong(nextSong!);
       }, 500);
     } else {
       // If no next song (end of playlist and not looping)
+      console.log("No next song to play");
       setIsPlaying(false);
       stopRotationAnimation();
     }
   }, [currentSong, playlist, shuffleMode, loopMode, setIsPlaying, stopRotationAnimation, playSong]);
 
-  // Now we can safely use handleSongEnd
-  const { playYouTubeVideo, pauseYouTubeVideo, stopYouTubeVideo } = useYouTubePlayer(handleSongEnd);
+  // Store the current handleSongEnd in the ref
+  useEffect(() => {
+    handleSongEndRef.current = handleSongEnd;
+  }, [handleSongEnd]);
 
-  // Fix the dependency array in playSong to include stopYouTubeVideo
-  // This is handled implicitly as we're defining it outside and it's in scope
+  const { playYouTubeVideo, pauseYouTubeVideo, stopYouTubeVideo } = useYouTubePlayer(() => {
+    console.log("YouTube video ended callback triggered");
+    handleSongEndRef.current();
+  });
 
   // Set up explicit event listener for audio ended event
   useEffect(() => {
+    console.log("Setting up audio ended event listener");
+    
     // Remove any existing listeners to avoid duplicates
-    audio.removeEventListener('ended', handleSongEnd);
+    audio.removeEventListener('ended', () => handleSongEndRef.current());
+    
+    const handleAudioEnded = () => {
+      console.log("Audio ended event fired");
+      handleSongEndRef.current();
+    };
     
     // Add the event listener
-    audio.addEventListener('ended', handleSongEnd);
+    audio.addEventListener('ended', handleAudioEnded);
     
     // Clean up on component unmount
     return () => {
-      audio.removeEventListener('ended', handleSongEnd);
+      audio.removeEventListener('ended', handleAudioEnded);
     };
-  }, [audio, handleSongEnd]);
+  }, [audio]);
 
   // Use playbackController with the now fully defined functions
   const { handlePlayPause } = usePlaybackController(
@@ -137,7 +161,7 @@ export function useAudioPlayer() {
     pauseYouTubeVideo,
     stopYouTubeVideo,
     playSong,
-    handleSongEnd
+    () => handleSongEndRef.current()
   );
 
   // Use playlistController
