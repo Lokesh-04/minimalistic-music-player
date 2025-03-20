@@ -46,7 +46,8 @@ export default function AudioPlayer() {
       />
 
       <div className="relative">
-        {currentSong?.type === 'youtube' && currentSong.videoId && (
+        {/* Show YouTube player only when it's a YouTube video AND it's currently playing */}
+        {currentSong?.type === 'youtube' && currentSong.videoId && isPlaying && (
           <YouTubePlayer ref={iframeRef} videoId={currentSong.videoId} />
         )}
         
@@ -63,7 +64,13 @@ export default function AudioPlayer() {
         />
       </div>
 
-      <NowPlaying currentSong={currentSong} />
+      {playlist.length === 0 ? (
+        <p className="mt-6 text-player-text text-sm opacity-80">
+          Your playlist is empty. Add some songs to get started!
+        </p>
+      ) : (
+        <NowPlaying currentSong={currentSong} />
+      )}
     </div>
   );
 }

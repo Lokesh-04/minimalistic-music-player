@@ -1,6 +1,5 @@
 
 import { useEffect, useRef } from "react";
-import { Song } from "@/utils/audioUtils";
 
 export function useAudioEvents(
   audio: HTMLAudioElement,
@@ -17,24 +16,19 @@ export function useAudioEvents(
   useEffect(() => {
     console.log("Setting up audio ended event listener");
     
-    // Remove any existing listeners to avoid duplicates
-    audio.removeEventListener('ended', () => handleSongEndRef.current());
-    
     const handleAudioEnded = () => {
       console.log("Audio ended event fired");
       handleSongEndRef.current();
     };
     
-    // Add the event listener
+    // Add the event listener - need to use a stable function reference
     audio.addEventListener('ended', handleAudioEnded);
     
     // Clean up on component unmount
     return () => {
       audio.removeEventListener('ended', handleAudioEnded);
     };
-  }, [audio]);
+  }, [audio]); // Only re-run if audio object changes
 
-  return {
-    handleSongEndRef
-  };
+  return null; // Don't need to return anything
 }

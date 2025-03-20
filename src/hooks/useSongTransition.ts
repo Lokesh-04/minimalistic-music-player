@@ -74,17 +74,20 @@ export function useSongTransition(
     if (shuffleMode) {
       // Get a random song that's different from the current one
       nextSong = getRandomSong(playlist, currentSong);
+      console.log("Selected random next song:", nextSong?.title);
     } else {
       // Play next song in playlist
       if (currentIndex < playlist.length - 1) {
         nextSong = playlist[currentIndex + 1];
+        console.log("Next sequential song:", nextSong.title);
       } else if (loopMode && playlist.length > 0) {
         // Loop back to the first song if loop mode is enabled
         nextSong = playlist[0];
+        console.log("Looping back to first song:", nextSong.title);
+      } else {
+        console.log("End of playlist reached and not looping");
       }
     }
-
-    console.log("Next song:", nextSong);
 
     if (nextSong) {
       // Play the next song with a small delay to avoid issues

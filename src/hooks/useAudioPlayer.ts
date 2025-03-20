@@ -29,6 +29,11 @@ export function useAudioPlayer() {
   // Create a ref to store the handleSongEnd function to avoid circular dependencies
   const handleSongEndRef = useRef<() => void>(() => {});
 
+  const { playYouTubeVideo, pauseYouTubeVideo, stopYouTubeVideo } = useYouTubePlayer(() => {
+    console.log("YouTube video ended callback triggered");
+    handleSongEndRef.current();
+  });
+
   // Use our song transition hook
   const { playSong, handleSongEnd } = useSongTransition(
     audio,
@@ -43,16 +48,11 @@ export function useAudioPlayer() {
     iframeRef
   );
 
-  // Use audio events hook to manage audio end event
-  useAudioEvents(audio, () => handleSongEndRef.current());
-
   // Store the current handleSongEnd in the ref
   handleSongEndRef.current = handleSongEnd;
 
-  const { playYouTubeVideo, pauseYouTubeVideo, stopYouTubeVideo } = useYouTubePlayer(() => {
-    console.log("YouTube video ended callback triggered");
-    handleSongEndRef.current();
-  });
+  // Use audio events hook to manage audio end event
+  useAudioEvents(audio, () => handleSongEndRef.current());
 
   // Use playbackController with the now fully defined functions
   const { handlePlayPause } = usePlaybackController(
