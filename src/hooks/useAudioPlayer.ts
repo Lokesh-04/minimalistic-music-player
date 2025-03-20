@@ -6,8 +6,8 @@ import { usePlaylistController } from "./usePlaylistController";
 import { usePlaybackController } from "./usePlaybackController";
 import { useSongTransition } from "./useSongTransition";
 import { usePlaybackMode } from "./usePlaybackMode";
-import { useCallback, useEffect, useRef } from "react";
-import { Song } from "@/utils/audioUtils";
+import { useAudioEvents } from "./useAudioEvents";
+import { useCallback, useRef } from "react";
 
 export function useAudioPlayer() {
   const playerState = usePlayerState();
@@ -29,7 +29,7 @@ export function useAudioPlayer() {
   // Create a ref to store the handleSongEnd function to avoid circular dependencies
   const handleSongEndRef = useRef<() => void>(() => {});
 
-  // Use our new hooks
+  // Use our song transition hook
   const { playSong, handleSongEnd } = useSongTransition(
     audio,
     playlist,
@@ -43,36 +43,16 @@ export function useAudioPlayer() {
     iframeRef
   );
 
+  // Use audio events hook to manage audio end event
+  useAudioEvents(audio, () => handleSongEndRef.current());
+
   // Store the current handleSongEnd in the ref
-  useEffect(() => {
-    handleSongEndRef.current = handleSongEnd;
-  }, [handleSongEnd]);
+  handleSongEndRef.current = handleSongEnd;
 
   const { playYouTubeVideo, pauseYouTubeVideo, stopYouTubeVideo } = useYouTubePlayer(() => {
     console.log("YouTube video ended callback triggered");
     handleSongEndRef.current();
   });
-
-  // Set up explicit event listener for audio ended event
-  useEffect(() => {
-    console.log("Setting up audio ended event listener");
-    
-    // Remove any existing listeners to avoid duplicates
-    audio.removeEventListener('ended', () => handleSongEndRef.current());
-    
-    const handleAudioEnded = () => {
-      console.log("Audio ended event fired");
-      handleSongEndRef.current();
-    };
-    
-    // Add the event listener
-    audio.addEventListener('ended', handleAudioEnded);
-    
-    // Clean up on component unmount
-    return () => {
-      audio.removeEventListener('ended', handleAudioEnded);
-    };
-  }, [audio]);
 
   // Use playbackController with the now fully defined functions
   const { handlePlayPause } = usePlaybackController(
