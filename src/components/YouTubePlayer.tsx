@@ -8,7 +8,7 @@ interface YouTubePlayerProps {
 const YouTubePlayer = forwardRef<HTMLIFrameElement, YouTubePlayerProps>(
   ({ videoId }, ref) => {
     return (
-      <div className="absolute top-0 left-0 w-full h-full opacity-0 pointer-events-none">
+      <div className="absolute top-0 left-0 w-full h-full opacity-100 pointer-events-auto">
         <iframe
           ref={ref}
           width="100%"
